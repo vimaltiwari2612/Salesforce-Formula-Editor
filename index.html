@@ -1,0 +1,456 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Salesforce Formula Editor</title>
+    <style>
+        body {
+            font-family: sans-serif;
+            margin: 20px;
+            background-color: #f4f6f9;
+        }
+        .formula-container {
+            background-color: #fff;
+            padding: 20px;
+            border-radius: 8px;
+            box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+            margin-bottom: 20px;
+        }
+        .formula-block {
+            border: 1px solid #d8dde6;
+            padding: 15px;
+            margin-bottom: 10px;
+            border-radius: 4px;
+            background-color: #f9f9f9;
+            position: relative;
+        }
+        .function-block {
+            padding-left: 20px;
+            border-left: 3px solid #0070d2;
+            margin-top: 10px;
+        }
+        .condition {
+            display: flex;
+            align-items: center;
+            gap: 10px;
+            margin-bottom: 8px;
+            padding: 8px;
+            border: 1px dashed #e0e0e0;
+            border-radius: 4px;
+        }
+        .condition input[type="text"], .condition select {
+            padding: 8px;
+            border: 1px solid #ccc;
+            border-radius: 4px;
+            flex-grow: 1;
+        }
+        .condition select {
+            flex-grow: 0;
+            min-width: 80px;
+        }
+        .function-name {
+            font-weight: bold;
+            color: #005fb2;
+            margin-bottom: 5px;
+            display: block;
+        }
+        textarea {
+            width: calc(100% - 22px);
+            min-height: 150px;
+            padding: 10px;
+            border: 1px solid #ccc;
+            border-radius: 4px;
+            margin-bottom: 10px;
+            font-family: monospace;
+            font-size: 12px;
+        }
+        button {
+            padding: 10px 15px;
+            background-color: #0070d2;
+            color: white;
+            border: none;
+            border-radius: 4px;
+            cursor: pointer;
+            margin-right: 10px;
+        }
+        button:hover {
+            background-color: #005fb2;
+        }
+        .literal {
+            color: #2e8b57; /* SeaGreen */
+        }
+        .field {
+            color: #8b4513; /* SaddleBrown */
+        }
+        .operator {
+            color: #ff4500; /* OrangeRed */
+        }
+        .remove-btn {
+            position: absolute;
+            top: 2px;
+            right: 2px;
+            background-color: #e0e0e0;
+            color: #555;
+            border: none;
+            border-radius: 50%;
+            cursor: pointer;
+            font-size: 10px;
+            line-height: 16px;
+            width: 16px;
+            height: 16px;
+            padding: 0;
+            text-align: center;
+        }
+        .remove-btn:hover {
+            background-color: #d32f2f;
+            color: white;
+        }
+        .add-btn {
+            background-color: #4caf50;
+            color: white;
+            padding: 5px 10px;
+            font-size: 12px;
+            margin-top: 10px;
+        }
+        .add-btn:hover {
+            background-color: #388e3c;
+        }
+        #errorMessages {
+            color: red;
+            margin-top: 10px;
+            padding: 10px;
+            border: 1px solid red;
+            border-radius: 4px;
+            background-color: #ffebee;
+        }
+    </style>
+</head>
+<body>
+
+    <h1>Salesforce Formula Editor</h1>
+
+    <div class="formula-container">
+        <h2>Input Formula</h2>
+        <textarea id="formulaInput">IF(
+  SBQQ__RequiredBy__r.SBQQ__ProductCode__c == 'MANDIANT-SERVICES',
+    IF(
+      AND(
+        CPQ_Redeem_Type__c != 'None',
+        CPQ_Redeem_Type__c != ''
+      ),
+      'REDEMPTION LINES',
+      'CONSULTING NON NEW OPERATION'
+    ),
+    IF(
+      AND(
+        CONTAINS(SBQQ__RequiredBy__r.SBQQ__ProductCode__c, 'Looker'),
+        SBQQ__Quote__r.CPQ_Reseller_Partner__c != '',
+        SBQQ__Quote__r.CPQ_Reseller_Partner__r.Partner_Type__c == 'Distributor'
+      ),
+      'PLACEHOLDER: True value for Looker Distributor',
+      IF(
+        SBQQ__Quote__r.CPQ_Reseller_Partner__c != '',
+        'PARTNER DEAL BASE AND OVERAGE',
+        'CHRONICLE HUNT DEAL'
+      )
+    )
+)</textarea>
+        <button id="parseButton">Parse Formula</button>
+        <div id="errorMessages" style="display:none;"></div>
+    </div>
+
+    <div class="formula-container">
+        <h2>Formula Editor UI</h2>
+        <div id="formulaEditor"></div>
+    </div>
+
+    <div class="formula-container">
+        <h2>Generated Formula</h2>
+        <button id="generateButton">Generate Formula String</button>
+        <textarea id="formulaOutput" readonly></textarea>
+    </div>
+
+    <script>
+        document.getElementById('parseButton').addEventListener('click', () => {
+            const formulaText = document.getElementById('formulaInput');
+            const editorDiv = document.getElementById('formulaEditor');
+            const errorDiv = document.getElementById('errorMessages');
+            editorDiv.innerHTML = ''; // Clear previous UI
+            errorDiv.innerHTML = '';   // Clear previous errors
+            errorDiv.style.display = 'none';
+
+            const errors = validateFormulaSyntax(formulaText.value);
+            if (errors.length > 0) {
+                errorDiv.innerHTML = errors.map(e => e.message).join('<br>');
+                errorDiv.style.display = 'block';
+
+                // Focus on the first error location
+                const firstError = errors[0];
+                if (firstError.index !== undefined) {
+                    formulaText.focus();
+                    formulaText.setSelectionRange(firstError.index, firstError.index + 1);
+                }
+                return;
+            }
+
+            try {
+                const parsedFormula = parseFormula(formulaText.value);
+                console.log('Parsed:', JSON.stringify(parsedFormula, null, 2));
+                editorDiv.appendChild(renderElement(parsedFormula));
+            } catch (error) {
+                console.error("Parsing Error:", error);
+                errorDiv.innerHTML = 'Error parsing formula: ' + error.message;
+                errorDiv.style.display = 'block';
+            }
+        });
+
+        document.getElementById('generateButton').addEventListener('click', () => {
+            const editorDiv = document.getElementById('formulaEditor');
+            const rootElement = editorDiv.querySelector('.formula-block');
+            if (rootElement) {
+                try {
+                    const inputs = editorDiv.querySelectorAll('input[type="text"]');
+                    for (const input of inputs) {
+                        if (!input.value.trim()) {
+                            alert("Please fill in all input fields in the editor.");
+                            input.focus();
+                            return;
+                        }
+                    }
+                    const generatedFormula = generateFormula(rootElement);
+                    document.getElementById('formulaOutput').value = generatedFormula;
+                } catch (error) {
+                    console.error("Generation Error:", error);
+                    document.getElementById('formulaOutput').value = 'Error generating formula: ' + error.message;
+                }
+            }
+        });
+
+        function validateFormulaSyntax(formulaStr) {
+            const errors = [];
+            const stack = [];
+            for (let i = 0; i < formulaStr.length; i++) {
+                if (formulaStr[i] === '(') {
+                    stack.push({ char: '(', index: i });
+                } else if (formulaStr[i] === ')') {
+                    if (stack.length === 0) {
+                        errors.push({ message: "Mismatched parentheses: Extra closing parenthesis found.", index: i });
+                        return errors;
+                    }
+                    stack.pop();
+                }
+            }
+            if (stack.length > 0) {
+                errors.push({ message: `Mismatched parentheses: Unterminated opening parenthesis.`, index: stack[0].index });
+            }
+
+            // More detailed regex checks for missing arguments
+            const regexes = [
+                { re: /\(\s*,(?!\s*')/, message: "Missing argument: Empty argument found after an opening parenthesis and comma.", offset: 1 },
+                { re: /,\s*,(?!\s*')/, message: "Missing argument: Empty argument found between commas.", offset: 1 },
+                { re: /,\s*\)/, message: "Missing argument: Empty argument found before a closing parenthesis.", offset: 1 }
+            ];
+
+            for (const { re, message, offset } of regexes) {
+                const match = formulaStr.match(re);
+                if (match) {
+                    errors.push({ message: message, index: match.index + offset });
+                }
+            }
+
+            return errors;
+        }
+
+        function parseFormula(formulaStr) {
+            formulaStr = formulaStr.replace(/\n/g, ' ').replace(/\s+/g, ' ').trim();
+
+            function parseArgs(argStr) {
+                const args = [];
+                let balance = 0;
+                let currentArg = '';
+                let inQuotes = false;
+                for (let i = 0; i < argStr.length; i++) {
+                    const char = argStr[i];
+                    if (char === "'") inQuotes = !inQuotes;
+
+                    if (!inQuotes) {
+                        if (char === '(') balance++;
+                        else if (char === ')') balance--;
+                    }
+
+                    if (char === ',' && balance === 0 && !inQuotes) {
+                        args.push(currentArg.trim());
+                        currentArg = '';
+                        continue;
+                    }
+                    currentArg += char;
+                }
+                args.push(currentArg.trim());
+                return args.map(arg => parseValue(arg));
+            }
+
+            function parseValue(valueStr) {
+                valueStr = valueStr.trim();
+                if (valueStr.startsWith("'") && valueStr.endsWith("'")) {
+                    return { type: 'literal', value: valueStr };
+                }
+
+                const functionMatch = valueStr.match(/^([A-Z_][A-Z0-9_]*)\s*\((.*)\)$/i);
+                if (functionMatch) {
+                    const funcName = functionMatch[1].toUpperCase();
+                    const argContent = functionMatch[2];
+                    const args = parseArgs(argContent);
+                    return { type: 'function', name: funcName, args: args };
+                }
+
+                const conditionMatch = valueStr.match(/^(.*)\s*(==|!=|>=|<=|>|<)\s*(.*)$/);
+                if (conditionMatch) {
+                    const left = conditionMatch[1].trim();
+                    const right = conditionMatch[3].trim();
+                    const operator = conditionMatch[2];
+                    return {
+                        type: 'condition',
+                        left: parseValue(left),
+                        operator: operator,
+                        right: parseValue(right)
+                    };
+                }
+
+                return { type: 'field', value: valueStr };
+            }
+
+            return parseValue(formulaStr);
+        }
+
+        function createRemoveButton() {
+            const button = document.createElement('button');
+            button.className = 'remove-btn';
+            button.textContent = 'X';
+            button.addEventListener('click', (e) => {
+                e.target.closest('.formula-block').remove();
+            });
+            return button;
+        }
+
+        function createAddButton(argsContainer) {
+            const button = document.createElement('button');
+            button.className = 'add-btn';
+            button.textContent = 'Add Argument';
+            button.addEventListener('click', () => {
+                const newCondition = {
+                    type: 'condition',
+                    left: { type: 'field', value: 'Field__c' },
+                    operator: '==',
+                    right: { type: 'literal', value: "'Value'" }
+                };
+                argsContainer.appendChild(renderElement(newCondition));
+            });
+            return button;
+        }
+
+        function renderElement(element) {
+            const block = document.createElement('div');
+            block.className = 'formula-block';
+            block.dataset.type = element.type;
+            block.appendChild(createRemoveButton());
+
+            if (element.type === 'function') {
+                block.dataset.name = element.name;
+                const nameSpan = document.createElement('span');
+                nameSpan.className = 'function-name';
+                nameSpan.textContent = element.name;
+                block.appendChild(nameSpan);
+
+                const argsContainer = document.createElement('div');
+                argsContainer.className = 'function-block';
+                element.args.forEach(arg => {
+                    argsContainer.appendChild(renderElement(arg));
+                });
+                block.appendChild(argsContainer);
+                 block.appendChild(createAddButton(argsContainer));
+            } else if (element.type === 'condition') {
+                block.className += ' condition';
+                block.dataset.operator = element.operator;
+
+                const leftInput = renderElement(element.left);
+                const operatorSelect = createOperatorSelect(element.operator);
+                const rightInput = renderElement(element.right);
+
+                leftInput.style.border = 'none';
+                rightInput.style.border = 'none';
+
+                const leftRemoveBtn = leftInput.querySelector('.remove-btn');
+                if (leftRemoveBtn) leftRemoveBtn.remove();
+                const rightRemoveBtn = rightInput.querySelector('.remove-btn');
+                if (rightRemoveBtn) rightRemoveBtn.remove();
+
+                block.appendChild(leftInput);
+                block.appendChild(operatorSelect);
+                block.appendChild(rightInput);
+            } else if (element.type === 'literal') {
+                const input = document.createElement('input');
+                input.type = 'text';
+                input.className = 'literal';
+                input.value = element.value;
+                block.appendChild(input);
+            } else if (element.type === 'field') {
+                const input = document.createElement('input');
+                input.type = 'text';
+                input.className = 'field';
+                input.value = element.value;
+                block.appendChild(input);
+            }
+            return block;
+        }
+
+        function createOperatorSelect(selectedOperator) {
+            const select = document.createElement('select');
+            select.className = 'operator';
+            const operators = ['==', '!=', '>', '<', '>=', '<='];
+            operators.forEach(op => {
+                const option = document.createElement('option');
+                option.value = op;
+                option.textContent = op;
+                if (op === selectedOperator) {
+                    option.selected = true;
+                }
+                select.appendChild(option);
+            });
+            return select;
+        }
+
+        function generateFormula(element) {
+            const type = element.dataset.type;
+
+            if (type === 'function') {
+                const funcName = element.dataset.name;
+                const argsContainer = element.querySelector('.function-block');
+                const args = Array.from(argsContainer.children)
+                                .map(child => generateFormula(child))
+                                .join(', ');
+                return `${funcName}(${args})`;
+            } else if (type === 'condition') {
+                const leftEl = element.children[1];
+                const operatorEl = element.children[2];
+                const rightEl = element.children[3];
+
+                const left = generateFormula(leftEl);
+                const operator = operatorEl.value;
+                const right = generateFormula(rightEl);
+                return `${left} ${operator} ${right}`;
+            } else if (type === 'literal') {
+                return element.querySelector('input').value;
+            } else if (element.type === 'field') {
+                return element.querySelector('input').value;
+            }
+            return '';
+        }
+
+        document.addEventListener('DOMContentLoaded', () => {
+             document.getElementById('parseButton').click();
+        });
+    </script>
+
+</body>
+</html>
