@@ -132,29 +132,7 @@
 
     <div class="formula-container">
         <h2>Input Formula</h2>
-        <textarea id="formulaInput">IF(
-  SBQQ__RequiredBy__r.SBQQ__ProductCode__c == 'MANDIANT-SERVICES',
-    IF(
-      AND(
-        CPQ_Redeem_Type__c != 'None',
-        CPQ_Redeem_Type__c != ''
-      ),
-      'REDEMPTION LINES',
-      'CONSULTING NON NEW OPERATION'
-    ),
-    IF(
-      AND(
-        CONTAINS(SBQQ__RequiredBy__r.SBQQ__ProductCode__c, 'Looker'),
-        SBQQ__Quote__r.CPQ_Reseller_Partner__c != '',
-        SBQQ__Quote__r.CPQ_Reseller_Partner__r.Partner_Type__c == 'Distributor'
-      ),
-      'PLACEHOLDER: True value for Looker Distributor',
-      IF(
-        SBQQ__Quote__r.CPQ_Reseller_Partner__c != '',
-        'PARTNER DEAL BASE AND OVERAGE',
-        'CHRONICLE HUNT DEAL'
-      )
-    )
+        <textarea id="formulaInput">IF( AND (A == 100, B ==20 , C == 10), 'All Matching values','Nothing matches')
 )</textarea>
         <button id="parseButton">Parse Formula</button>
         <div id="errorMessages" style="display:none;"></div>
