@@ -12,6 +12,7 @@ A simple web-based utility to visually edit and build Salesforce formulas. This 
 *   **No Backend Needed:** Runs entirely in the browser using HTML, CSS, and JavaScript.
 
 ## Screenshots
+<img width="1906" height="576" alt="image" src="https://github.com/user-attachments/assets/a49819b5-0ddf-45c4-b82e-cddeae7a3f96" />
 
 ## Setup / Usage
 
